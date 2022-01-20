@@ -47,8 +47,8 @@ void socket_close(int iSockFd)
 
 /*
 * @Function: socket_connect_wait
-* @Description:close socket
-* @Input:fd
+* @Description:connect 
+* @Input:sockfd: 描述fd: address ipv4  msecond:connect超时时间(ms) -1为阻塞式connect
 * @Output:NULL
 * @Return: NULL
 */
@@ -69,9 +69,10 @@ int socket_connect_wait(int sockfd, struct sockaddr_in *address, int msecond)
 
     memset(&mytm, 0, sizeof(struct timeval));
 
-    if (-1 == msecond)  /*非阻塞connet*/
+    if (-1 == msecond)  /*阻塞connet*/
     {
         ret_val = connect(sockfd, (struct sockaddr *)address, sizeof(struct sockaddr_in));
+        RTCP_PRINTF(" %d\n", ret_val);
         return ret_val;
     }
 
@@ -81,7 +82,6 @@ int socket_connect_wait(int sockfd, struct sockaddr_in *address, int msecond)
         RTCP_PRINTF("ioctl socket failed\n");
     }
     
-  
     ret_val = connect(sockfd, (struct sockaddr *)address, (socklen_t)sizeof(struct sockaddr_in));
 
     if (-1 == ret_val)
@@ -129,7 +129,7 @@ int socket_connect_wait(int sockfd, struct sockaddr_in *address, int msecond)
 * @Output:NULL
 * @Return: NULL
 */
-int socket_client_tcp_create_ipv4(const char *sHostName, int uPort, int uWaitMsec)
+int socket_client_tcp_create_ipv4(const char *sHostName, int uPort, int uWaitMsec, int isBlock)
 {
     int iSock = -1;
     struct sockaddr_in address;
@@ -152,7 +152,14 @@ int socket_client_tcp_create_ipv4(const char *sHostName, int uPort, int uWaitMse
         RTCP_PRINTF("connect to host %s:%d in %dms failed!\n", sHostName, uPort, uWaitMsec);
         return -1;
     }
-
+    if(1 == isBlock)  /*设置非阻塞*/
+    {
+        if (0 != ioctl(iSock, FIONBIO, &isBlock))
+        {
+            RTCP_PRINTF("ioctl  Block socket failed\n");
+            return -1;
+        }
+    }
     return iSock;
 }
 
@@ -163,6 +170,6 @@ int main()
 {
   char *ww = "🐏青青";
   RTCP_PRINTF("wdwdw = %s\n",ww);
-  socket_client_tcp_create_ipv4("127.0.0.1", 9000, 3000);
+  socket_client_tcp_create_ipv4("127.0.0.1", 9000, 3000, SOCKET_NOBLOCK);
   return 0;
 }
