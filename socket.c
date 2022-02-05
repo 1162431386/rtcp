@@ -1,23 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/tcp.h>
-#include <netinet/in.h>
-#include <sys/ioctl.h>
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <pthread.h>
 #include "socket.h"
-
-struct svr_process_t {
-	int cli_sock_fd;
-	struct sockaddr_in cliaddr;
-};
-
-
 struct svr_t {
 	svr_process_thread func;
     int uWaitMsec;
@@ -50,7 +31,7 @@ static int pthreadGetPriorityScope(int *minPriority, int *maxPriority)
 	return 0;
 }
 
-static int setPthreadAttr(pthread_attr_t *attr, int priority, size_t stacksize, int bRealTime)
+int setPthreadAttr(pthread_attr_t *attr, int priority, size_t stacksize, int bRealTime)
 {
 	int rval;
 	struct sched_param	params;
@@ -519,20 +500,154 @@ int svr_init(unsigned short int port, svr_process_thread func, int uWaitMsec)
     return 0;
 }
 
-
-void *test(void *arg)
+/*
+* @Function: sys_socket_readn_wait
+* @Description:从对端接受固定字节的数据
+* @Input: sockfd：描述符  pbuf：接受缓冲区  buflen：接受字节长  uWaitMsec：超等等待时间
+* @Output:NULL
+* @Return:实际接收到数据的长度
+*/
+int sys_socket_readn_wait(int sockfd, void* pbuf, int buflen, unsigned int uWaitMsec)
 {
+	int	nleft;
+	int	nread;
+	char *ptr;
+	struct timeval 	stTimeout;
+	fd_set rset;
 
+	ptr = (char *)pbuf;
+	nleft = buflen;
 
-    return NULL;
+	while (nleft > 0)
+    {
+    	stTimeout.tv_sec = uWaitMsec;
+    	stTimeout.tv_usec = 0;
+    	FD_ZERO(&rset);
+    	FD_SET(sockfd, &rset);
+    	if(select(sockfd+1, &rset, NULL, NULL, &stTimeout) <= 0)
+        {
+            /* 0--timeout */
+        	return -1;
+        }
+
+    	if((nread = recv(sockfd, ptr, nleft, 0)) < 0)
+        {
+            
+        	if(errno == EINTR)
+            {
+            	nread = 0;
+            }
+        	else
+            {
+            	return -1;
+            }
+        }
+    	else if (nread == 0)
+        {
+        	break;
+        }
+
+    	nleft -= nread;
+    	ptr   += nread;
+    }
+    
+	return(buflen - nleft);
 }
 
-int main()
+
+/*
+* @Function: sys_socket_read_wait
+* @Description:尝试从对端接受数据
+* @Input: sockfd：描述符  pbuf：接受缓冲区  buflen：缓冲区大小  uWaitMsec：超等等待时间
+* @Output:NULL
+* @Return:实际接收到数据的长度
+*/
+int sys_socket_read_wait(int sockfd, void* pbuf, int bufsize, unsigned int uWaitMsec)
 {
-  svr_init(9000,test,WAIT_FOREVER);
-  while(1)
-  {
-      pause();
-  }
-  return 0;
+	int	nleft;
+	int	nread;
+	char *ptr;
+	struct timeval 	stTimeout;
+	fd_set rset;
+
+	ptr = (char *)pbuf;
+	nleft = bufsize;
+
+	do
+    {
+    	stTimeout.tv_sec = uWaitMsec/1000;
+    	stTimeout.tv_usec = (uWaitMsec%1000)*1000;
+
+    	FD_ZERO(&rset);
+    	FD_SET(sockfd, &rset);
+    	if(select(sockfd+1, &rset, NULL, NULL, &stTimeout) <= 0)
+        {
+            /* 0--timeout */
+        	return -1;
+        }
+
+    	if((nread = recv(sockfd, ptr, nleft, 0)) < 0)
+        {
+        	if(errno == EINTR)
+            {
+            	nread = 0;
+            }
+        	else
+            {
+            	return -1;
+            }
+        }
+    	else if (nread == 0)
+        {
+        	break;
+        }
+
+    	nleft -= nread;
+    	ptr   += nread;
+
+    }while(0);
+
+	return (bufsize - nleft);
 }
+
+/*
+* @Function: sys_socket_writen
+* @Description:向对端发送数据
+* @Input: sockfd：描述符  pbuf：接受缓冲区  buflen：发送的字节数
+* @Output:NULL
+* @Return:实际发送的数据的长度
+*/
+int sys_socket_writen(int sockfd, void* pbuf, int buflen)
+{
+	int nleft, nwritten;
+ 	char *ptr;
+
+	ptr = (char *)pbuf;
+	nleft = buflen;
+
+	while(nleft>0)
+    {
+    	if((nwritten = send(sockfd, ptr, nleft, MSG_NOSIGNAL)) == -1)
+        {
+        	if(errno == EINTR)
+            {
+            	RTCP_PRINTF("EINTR\n");
+            	nwritten = 0;
+            }
+        	else
+            {
+            	RTCP_PRINTF("Send() error, %s\n", strerror(errno));
+            	return -1;
+            }
+        }
+
+    	nleft -= nwritten;
+    	ptr   += nwritten;
+    }
+
+	return(buflen);
+}
+
+
+
+
