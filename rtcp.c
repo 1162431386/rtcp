@@ -1,12 +1,11 @@
 #include "rtcp.h"
-
 #include "socket.h"
 
 #define  RECONNETED_CNT    30    /*尝试重连次数*/
 
 #define  RTCP_PORT1        9000
 #define  RTCP_PORT2        9001
-
+#define  RTCP_SWAP_BUFF_MAX_SIZE    (1024 * 2)
 
 struct rtcp_cli_t
 {
@@ -17,27 +16,78 @@ struct rtcp_cli_t
 
 struct rtcp_fd_t
 {
-   int svr_fd_num[2];
+    int svr_fd_num[2];
    int cli_fd_num[2];
 };
 
 struct rtcp_fd_t g_fd = {{-1},{-1}};
 
+
+static int rtcp_swap_stream(int src_fd,int dist_fd)
+{
+    char *pBuff = NULL;
+    int iRecvLen = 0;
+    int iSendLen = 0;
+    pBuff = (char *)malloc(RTCP_SWAP_BUFF_MAX_SIZE);
+    while(1)
+    {
+        if(-1 == src_fd || -1 == dist_fd)
+        {
+            continue;
+        }
+        iRecvLen = sys_socket_read_wait(src_fd,pBuff,RTCP_SWAP_BUFF_MAX_SIZE,WAIT_FOREVER);
+        if(iRecvLen > 0)
+        {
+            RTCP_PRINTF("###########%s\n",pBuff);
+            iSendLen = sys_socket_writen(dist_fd,pBuff,iRecvLen);
+            if(iSendLen != iRecvLen)
+            {
+                RTCP_PRINTF("send ERROR!\n");
+                goto EXIT;
+            }
+        }
+        else
+        {
+          RTCP_PRINTF("recv error!%d\n",iRecvLen);
+          goto EXIT;
+        }
+    }
+    return 0;
+EXIT:
+    RTCP_PRINTF("swap error!,close fd!\n");
+    SAFE_CLOSE(src_fd);
+    SAFE_CLOSE(dist_fd);
+    SAFE_FREE(pBuff);
+    return -1;
+}
+
+
+
 static void *svr_process_thread_1(void *arg)
 {
+    RTCP_PRINTF("hahah\n");
+#if 0
+    int another_sock_fd = -1;
     struct svr_process_t *psvr_t = (struct svr_process_t *)(arg);
-    g_fd.svr_fd_num[0] = psvr_t->cli_sock_fd;
-    
-
+    g_fd.svr_fd_num[0] = psvr_t->cli_sock_fd;                  /*将本端的描述符保存*/
+    another_sock_fd = g_fd.svr_fd_num[1];                     /*获取对端fd*/
+    RTCP_PRINTF("psvr_t->cli_sock_fd = %d ,another_sock_fd = %d\n",psvr_t->cli_sock_fd,another_sock_fd);
+    rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/
+#endif 
     return NULL;
 }
 
 static void *svr_process_thread_2(void *arg)
-{
+{ 
+    RTCP_PRINTF("hahah\n");
+ #if 0   
+    int another_sock_fd = -1;
     struct svr_process_t *psvr_t = (struct svr_process_t *)(arg);
-    g_fd.svr_fd_num[1] = psvr_t->cli_sock_fd;
-
-
+    g_fd.svr_fd_num[1] = psvr_t->cli_sock_fd;                  /*将本端的描述符保存*/
+    another_sock_fd = g_fd.svr_fd_num[0];                     /*获取对端fd*/
+    RTCP_PRINTF("psvr_t->cli_sock_fd = %d ,another_sock_fd = %d\n",psvr_t->cli_sock_fd,another_sock_fd);
+    rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/
+#endif 
     return NULL;
 }
 
@@ -49,12 +99,13 @@ static int rtcp_server_thread_start(unsigned short int port_1, unsigned short in
         RTCP_PRINTF("svr_1 crate faild!\n");
         return -1;
     }
-
+#if 0
     if(-1 == svr_init(port_2, svr_process_thread_2, WAIT_FOREVER))
     {
         RTCP_PRINTF("svr_2 crate faild!\n");
         return -1;
     }
+#endif
     return 0;
 }
 
@@ -77,19 +128,21 @@ static void  *rtcp_client_thread(void *arg)
     } while (-1 == sock_fd);
     if(-1 != sock_fd)
     {
-        RTCP_PRINTF("connect success! port = %d\n",prtcp_cli_t->port);
+        RTCP_PRINTF("connect success! port = %d sock fd = %d\n",prtcp_cli_t->port,sock_fd);
     }
     if(1 == prtcp_cli_t->cli_number)
     {
         g_fd.cli_fd_num[0] = sock_fd;                     /*将本端的描述符保存*/
-        another_sock_fd = g_fd.svr_fd_num[0];             /*获取对端描述符*/
-                                                          /*做数据交换*/
+        another_sock_fd = g_fd.cli_fd_num[1];             /*获取对端描述符*/
+        RTCP_PRINTF("sock_fd = %d ,another_sock_fd = %d\n",sock_fd,another_sock_fd);
+        rtcp_swap_stream(sock_fd,another_sock_fd);        /*做数据交换*/
     }
     else if(2 == prtcp_cli_t->cli_number)
     {
         g_fd.cli_fd_num[1] = sock_fd;                     /*将本端的描述符保存*/
-        another_sock_fd = g_fd.svr_fd_num[1];             /*获取对端描述符*/
-                                                          /*做数据交换*/
+        another_sock_fd = g_fd.cli_fd_num[0];             /*获取对端描述符*/
+        RTCP_PRINTF("sock_fd = %d ,another_sock_fd = %d\n",sock_fd,another_sock_fd);
+        rtcp_swap_stream(sock_fd,another_sock_fd);        /*做数据交换*/                                                 /*做数据交换*/
     }
     else
     {
@@ -128,21 +181,37 @@ int rtcp_mian()
 
     rtcp_cli_t2.cli_number = 2;
     memcpy(rtcp_cli_t2.ip,"127.0.0.1",sizeof(rtcp_cli_t2.ip));
-    rtcp_cli_t2.port = 9000;
+    rtcp_cli_t2.port = 9001;
     /*启动服务器监听相应端口*/
-    (void)rtcp_server_thread_start(RTCP_PORT1,RTCP_PORT2);
     rtcp_cli_thread_start(&rtcp_cli_t1);
     rtcp_cli_thread_start(&rtcp_cli_t2);
     return 0;
 }
 
 
-int main()
+
+
+int main(int argc, void *argv[])
 {
-  rtcp_mian();
+    if (argc < 2) {
+        printf("FORMAT is [app svr] or  [app cli]\n");
+        return -1;
+    }
+
+    if (0 == strcmp(argv[1], "svr")) {
+        (void)rtcp_server_thread_start(RTCP_PORT1,RTCP_PORT2);
+    }
+    else if (0 == strcmp(argv[1], "cli")) {
+        rtcp_mian();	
+    }
+    else {
+        printf("INVALID arg, valid range {\"svr\", \"cli\"}\n");
+        return -1;
+    }
   while(1)
   {
       pause();
   }
-  return 0;
+    return 0;
+    
 }

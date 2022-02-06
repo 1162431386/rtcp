@@ -434,8 +434,8 @@ void  *socket_server_pthread_crate(void *arg)
         
         setPthreadAttr(&attr, 50, 1024 * 1024, 1);
         ret = pthread_create(&tid, NULL, svr->func, svr_process);
-
         pthread_attr_destroy(&attr);
+        
         RTCP_PRINTF("#######Cli_%d_Connected!\n", cli_num++);
 		if (0 != ret) {
 			RTCP_PRINTF("FAIL to create svr_process_thread, %s\n", strerror(ret));
