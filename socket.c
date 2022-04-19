@@ -480,24 +480,35 @@ static int svr_main(struct svr_t *svr)
 */
 int svr_init(unsigned short int port, svr_process_thread func, int uWaitMsec)
 {
-    static struct svr_t svr;
-    memset(&svr,0,sizeof(svr));
-    svr.sver_sock_fd = socket_server_crate(port);
-    if(-1 == svr.sver_sock_fd)
+    struct svr_t *svr = NULL;
+    svr = (struct svr_t *)malloc(sizeof(struct svr_t));
+    if(NULL == svr)
+    {
+         RTCP_PRINTF("svr malloc faild!\n");
+         return -1;
+    }
+    memset(svr,0,sizeof(sizeof(struct svr_t)));
+    svr->sver_sock_fd = socket_server_crate(port);
+    if(-1 == svr->sver_sock_fd)
     {
         RTCP_PRINTF("socket_server_crate error!\n");
-        return -1;
+        goto EXIT;
     }
-    svr.func = func;
-    svr.uWaitMsec = uWaitMsec;
-    svr.listen_port = port;
-    if(-1 == svr_main(&svr))
+    svr->func = func;
+    svr->uWaitMsec = uWaitMsec;
+    svr->listen_port = port;
+    if(-1 == svr_main(svr))
     {
         RTCP_PRINTF("svr main enter error!\n");
-        return -1;  
+        goto EXIT;  
     }
     RTCP_PRINTF("svr crate sucess! PORT :  %d\n",port);
     return 0;
+
+EXIT:
+    free(svr);
+    svr = NULL;
+    return -1;
 }
 
 /*
