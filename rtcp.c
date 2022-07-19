@@ -22,6 +22,22 @@ struct rtcp_fd_t
 
 struct rtcp_fd_t g_fd = {{-1,-1}};
 
+
+int get_another_stream(int num)
+
+{
+    /*获取另一端fd，如果当前为空，则等待*/
+    while(1)
+        {
+            if(-1 != g_fd.sock_fd[num])
+            {
+                return g_fd.sock_fd[num];
+            }
+            sleep(1);
+        }
+    return 0;
+}
+
 /*这里缓冲区必须是全局的，不然会释放掉之前发过来的数据*/
 static int rtcp_swap_stream(int src_fd,int dist_fd)
 {
@@ -78,7 +94,7 @@ static void *svr_process_thread_1(void *arg)
     int another_sock_fd = -1;
     struct svr_process_t *psvr_t = (struct svr_process_t *)(arg);
     g_fd.sock_fd[0] = psvr_t->cli_sock_fd;                  /*将本端的描述符保存*/
-    another_sock_fd = g_fd.sock_fd[1];                     /*获取对端fd*/
+    another_sock_fd = get_another_stream(1);                     /*获取对端fd*/
     RTCP_PRINTF("psvr_t->cli_sock_fd = %d ,another_sock_fd = %d\n",psvr_t->cli_sock_fd,another_sock_fd);
     rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/
 #endif 
@@ -91,7 +107,7 @@ static void *svr_process_thread_2(void *arg)
     int another_sock_fd = -1;
     struct svr_process_t *psvr_t = (struct svr_process_t *)(arg);
     g_fd.sock_fd[1] = psvr_t->cli_sock_fd;                  /*将本端的描述符保存*/
-    another_sock_fd = g_fd.sock_fd[0];                     /*获取对端fd*/
+    another_sock_fd = get_another_stream(0);                     /*获取对端fd*/
     RTCP_PRINTF("psvr_t->cli_sock_fd = %d ,another_sock_fd = %d\n",psvr_t->cli_sock_fd,another_sock_fd);
     rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/
 #endif 
@@ -137,7 +153,7 @@ static void  *rtcp_client_thread(void *arg)
 
     if(-1 != sock_fd)
     {
-        RTCP_PRINTF("connect success! port = %d sock fd = %d\n",prtcp_cli_t->port,sock_fd);
+        RTCP_PRINTF("connected to  %s:%d\n",prtcp_cli_t->ip,prtcp_cli_t->port);
     }
    
     if(1 == prtcp_cli_t->cli_number)
@@ -199,7 +215,7 @@ int rtcp_mian()
     rtcp_cli_t1.port = 22;
 
     rtcp_cli_t2.cli_number = 2;
-    memcpy(rtcp_cli_t2.ip,"10.1.14.137",sizeof(rtcp_cli_t2.ip));
+    memcpy(rtcp_cli_t2.ip,"127.0.0.1",sizeof(rtcp_cli_t2.ip));
     rtcp_cli_t2.port = 6001;
     /*启动服务器监听相应端口*/
     rtcp_cli_thread_start(&rtcp_cli_t1);
