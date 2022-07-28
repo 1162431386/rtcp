@@ -44,46 +44,15 @@ static int rtcp_swap_stream(int src_fd,int dist_fd)
     char *pBuff = NULL;
     int iRecvLen = 0;
     int iSendLen = 0;
-    pBuff = (char *)malloc(RTCP_SWAP_BUFF_MAX_SIZE);
+    pBuff = (char *)malloc(RTCP_SWAP_BUFF_MAX_SIZE);   /*这里需要优化内存申请释放的问题*/
+
     while(1)
     {
-        if(-1 == src_fd || -1 == dist_fd )
-        {
-            usleep(100);  
-            continue;
-        }
-
+        /*这里直接转发，收到数据后，原封不动转发出去*/
         iRecvLen = sys_socket_read_wait(src_fd,pBuff,RTCP_SWAP_BUFF_MAX_SIZE,WAIT_FOREVER);
-        RTCP_PRINTF("iRecvLen = %d ,pBuff = %s\n",iRecvLen,pBuff);
-        iSendLen = sys_socket_writen(dist_fd,pBuff,iRecvLen);
-#if 0       
-        if(iRecvLen > 0)
-        {
-           
-
-            if(iSendLen != iRecvLen)
-            {
-                RTCP_PRINTF("send ERROR!\n");
-                goto EXIT;
-            }
-
-        }
-
-        else
-        {
-          RTCP_PRINTF("recv error!%d\n",iRecvLen);
-          goto EXIT;
-        }
- #endif    
+        iSendLen = sys_socket_writen(dist_fd,pBuff,iRecvLen);   
     }
     return 0;
-
-EXIT:
-    RTCP_PRINTF("swap error!,close fd!\n");
-    SAFE_CLOSE(src_fd);
-    SAFE_CLOSE(dist_fd);
-    SAFE_FREE(pBuff);
-    return -1;
 }
 
 
@@ -95,7 +64,6 @@ static void *svr_process_thread_1(void *arg)
     struct svr_process_t *psvr_t = (struct svr_process_t *)(arg);
     g_fd.sock_fd[0] = psvr_t->cli_sock_fd;                  /*将本端的描述符保存*/
     another_sock_fd = get_another_stream(1);                     /*获取对端fd*/
-    RTCP_PRINTF("psvr_t->cli_sock_fd = %d ,another_sock_fd = %d\n",psvr_t->cli_sock_fd,another_sock_fd);
     rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/
 #endif 
     return NULL;
@@ -108,7 +76,6 @@ static void *svr_process_thread_2(void *arg)
     struct svr_process_t *psvr_t = (struct svr_process_t *)(arg);
     g_fd.sock_fd[1] = psvr_t->cli_sock_fd;                  /*将本端的描述符保存*/
     another_sock_fd = get_another_stream(0);                     /*获取对端fd*/
-    RTCP_PRINTF("psvr_t->cli_sock_fd = %d ,another_sock_fd = %d\n",psvr_t->cli_sock_fd,another_sock_fd);
     rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/
 #endif 
     return NULL;
@@ -226,7 +193,7 @@ int rtcp_mian()
 
 
 
-int main(int argc, void *argv[])
+int min(int argc, void *argv[])
 {
     int ch = 0;
     init_keyboard();
@@ -259,4 +226,74 @@ int main(int argc, void *argv[])
     exit(0);
     return 0;
     
+}
+
+
+
+int main(int argc, char *argv[])
+{
+    int Opt = 0;
+    optind = 1;
+    while (-1 != (Opt = getopt(argc, argv, "l:c:vh"))) 
+    {
+        switch (Opt)
+        {
+            case 'l':
+            {
+                unsigned short  lPort1 = 0;
+                unsigned short  lPort2 = 0;
+                char *strsepstr = NULL;
+                char *strPort1 = NULL;
+                char *strPort2 = NULL;
+                strsepstr = optarg;
+                strPort1 = strsep(&strsepstr, ":");
+                strPort2 = strsep(&strsepstr, ":");
+                if(NULL == strPort1 || NULL == strPort2)
+                {
+                   /*帮助*/
+                   return 0; 
+                }
+                lPort1 = atoi(strPort1);
+                lPort2 = atoi(strPort2);
+                (void)rtcp_server_thread_start(lPort1,lPort2);
+                printf("-1: %d %d\n",lPort1,lPort2);
+                break;
+            }
+            case 'c':
+            {
+                char *serverIp = NULL;
+                unsigned short serverPort = 0;
+                unsigned short localPort = 0;
+                char *strsepstr = NULL;
+                char *strserverPort = NULL;
+                char *strlocalPort = NULL;
+                strsepstr = optarg;
+                serverIp = strsep(&strsepstr, ":");
+                strserverPort = strsep(&strsepstr, ":");
+                if(NULL == serverIp || NULL == strserverPort)
+                {
+                    return 0; 
+                }
+                strlocalPort = strsep(&strsepstr, ":");
+                if(NULL == strlocalPort)
+                {
+                    localPort = 22;
+                }
+                else
+                {
+                    localPort = atoi(strlocalPort);
+                }
+                serverPort = atoi(strserverPort);
+                printf("-1: %s %d %d\n",serverIp,serverPort,localPort);
+                break; 
+            }
+            case 'v':
+                break;
+            case 'h':
+                break;
+            default:
+                return -1;
+        }
+
+    }
 }
