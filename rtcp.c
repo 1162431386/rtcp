@@ -171,7 +171,8 @@ int rtcp_cli_thread_start(struct rtcp_cli_t *prtcp_cli_t)
 }
 
 
-int rtcp_mian()
+
+int rtcp_cli_main_start(char *ip,short svrport,short sshport)
 {
     static struct rtcp_cli_t rtcp_cli_t1;
     static struct rtcp_cli_t rtcp_cli_t2;
@@ -179,12 +180,13 @@ int rtcp_mian()
     memset(&rtcp_cli_t2,0,sizeof(rtcp_cli_t2));
     rtcp_cli_t1.cli_number = 1;
     memcpy(rtcp_cli_t1.ip,"127.0.0.1",sizeof(rtcp_cli_t1.ip));
-    rtcp_cli_t1.port = 22;
+    rtcp_cli_t1.port = sshport;
 
     rtcp_cli_t2.cli_number = 2;
-    memcpy(rtcp_cli_t2.ip,"127.0.0.1",sizeof(rtcp_cli_t2.ip));
-    rtcp_cli_t2.port = 6001;
+    memcpy(rtcp_cli_t2.ip,ip,sizeof(rtcp_cli_t2.ip));
+    rtcp_cli_t2.port = svrport;
     /*启动服务器监听相应端口*/
+
     rtcp_cli_thread_start(&rtcp_cli_t1);
     rtcp_cli_thread_start(&rtcp_cli_t2);
     return 0;
@@ -192,41 +194,19 @@ int rtcp_mian()
 
 
 
-
-int min(int argc, void *argv[])
+void rtcp_help(void)
 {
-    int ch = 0;
-    init_keyboard();
-    if (argc < 2) {
-        printf("FORMAT is [app svr] or  [app cli]\n");
-        return -1;
-    }
-
-    if (0 == strcmp(argv[1], "svr")) {
-        (void)rtcp_server_thread_start(RTCP_PORT1,RTCP_PORT2);
-    }
-    else if (0 == strcmp(argv[1], "cli")) {
-        rtcp_mian();	
-    }
-    else {
-        printf("INVALID arg, valid range {\"svr\", \"cli\"}\n");
-        return -1;
-    }
-    while(ch != 'q')
-    {
-         if(kbhit()) 
-        {
-            ch = readch();
-        }
-        usleep(200);
-    }
-    close_keyboard();
-    close(g_fd.sock_fd[0]);
-    close(g_fd.sock_fd[1]);
-    exit(0);
-    return 0;
-    
+    printf("-l：Server listening port，-l A:B，the server is listening on\n");
+    printf("-c：The server ip port and client ssh port to which the client connects,\
+    -c A:B:C，A is the server ip to connect to, B is the server port to connect to, and c is the local ssh port(22 by default)\n");
+    printf("Example: Server: ./rctp -l 6001:6002\n"); 
+    printf("clie: ./rtcp -c 192.168.1.1:6001\n");  
+    printf("Press 'q' to exit\n");
+    return;
 }
+
+
+
 
 
 
@@ -234,6 +214,8 @@ int main(int argc, char *argv[])
 {
     int Opt = 0;
     optind = 1;
+    int ch = 0;
+    init_keyboard();
     while (-1 != (Opt = getopt(argc, argv, "l:c:vh"))) 
     {
         switch (Opt)
@@ -250,7 +232,8 @@ int main(int argc, char *argv[])
                 strPort2 = strsep(&strsepstr, ":");
                 if(NULL == strPort1 || NULL == strPort2)
                 {
-                   /*帮助*/
+                   printf("./rtcp -v View version information  -h help\n");
+                   close_keyboard();
                    return 0; 
                 }
                 lPort1 = atoi(strPort1);
@@ -272,6 +255,8 @@ int main(int argc, char *argv[])
                 strserverPort = strsep(&strsepstr, ":");
                 if(NULL == serverIp || NULL == strserverPort)
                 {
+                    printf("./rtcp -v View version information  -h help\n");
+                    close_keyboard();
                     return 0; 
                 }
                 strlocalPort = strsep(&strsepstr, ":");
@@ -285,15 +270,36 @@ int main(int argc, char *argv[])
                 }
                 serverPort = atoi(strserverPort);
                 printf("-1: %s %d %d\n",serverIp,serverPort,localPort);
+                rtcp_cli_main_start(serverIp,serverPort,localPort);
                 break; 
             }
             case 'v':
-                break;
+                printf("build  %s %s\n",__DATE__, __TIME__);
+                close_keyboard();
+                return -1;
             case 'h':
-                break;
+                rtcp_help();
+                close_keyboard();
+                return -1;
             default:
+                printf("./rtcp -v View version information  -h help\n");
+                close_keyboard();
                 return -1;
         }
 
+
     }
+    while(ch != 'q')
+    {
+         if(kbhit()) 
+        {
+            ch = readch();
+        }
+        usleep(200);
+    }
+    close_keyboard();
+    close(g_fd.sock_fd[0]);
+    close(g_fd.sock_fd[1]);
+    exit(0);
+    return 0;
 }
