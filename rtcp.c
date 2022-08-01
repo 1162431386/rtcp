@@ -8,6 +8,9 @@
 #define  RTCP_PORT2        6002
 #define  RTCP_SWAP_BUFF_MAX_SIZE    (1024 * 2)
 
+ 
+
+
 struct rtcp_cli_t
 {
     char ip[32];
@@ -128,7 +131,9 @@ static void  *rtcp_client_thread(void *arg)
         
         g_fd.sock_fd[0] = sock_fd;                     /*将本端的描述符保存*/
         another_sock_fd = g_fd.sock_fd[1];             /*获取对端描述符*/
+#ifdef DEBUG
         RTCP_PRINTF("sock_fd = %d ,another_sock_fd = %d\n",sock_fd,another_sock_fd);
+#endif
          while(1)
         {
             if(-1 != g_fd.sock_fd[1])
@@ -143,7 +148,9 @@ static void  *rtcp_client_thread(void *arg)
     {
         g_fd.sock_fd[1] = sock_fd;                     /*将本端的描述符保存*/
         another_sock_fd = g_fd.sock_fd[0];             /*获取对端描述符*/
+#ifdef DEBUG
         RTCP_PRINTF("sock_fd = %d ,another_sock_fd = %d\n",sock_fd,another_sock_fd);
+#endif
         rtcp_swap_stream(sock_fd,another_sock_fd);        /*做数据交换*/                                                 /*做数据交换*/
     }   
     else
@@ -216,7 +223,13 @@ int main(int argc, char *argv[])
     optind = 1;
     int ch = 0;
     init_keyboard();
-    while (-1 != (Opt = getopt(argc, argv, "l:c:vh"))) 
+    if(argc < 2)
+    {
+        printf("error !!! ./rtcp -v View version information  -h help\n");
+        close_keyboard();
+        return 0;
+    }
+    while (-1 != (Opt = getopt(argc, argv, "l:c:vhd"))) 
     {
         switch (Opt)
         {
@@ -239,7 +252,6 @@ int main(int argc, char *argv[])
                 lPort1 = atoi(strPort1);
                 lPort2 = atoi(strPort2);
                 (void)rtcp_server_thread_start(lPort1,lPort2);
-                printf("-1: %d %d\n",lPort1,lPort2);
                 break;
             }
             case 'c':
@@ -269,7 +281,6 @@ int main(int argc, char *argv[])
                     localPort = atoi(strlocalPort);
                 }
                 serverPort = atoi(strserverPort);
-                printf("-1: %s %d %d\n",serverIp,serverPort,localPort);
                 rtcp_cli_main_start(serverIp,serverPort,localPort);
                 break; 
             }
@@ -281,6 +292,7 @@ int main(int argc, char *argv[])
                 rtcp_help();
                 close_keyboard();
                 return -1;
+               
             default:
                 printf("./rtcp -v View version information  -h help\n");
                 close_keyboard();
@@ -303,3 +315,4 @@ int main(int argc, char *argv[])
     exit(0);
     return 0;
 }
+

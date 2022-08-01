@@ -46,7 +46,16 @@ struct svr_process_t {
 	int cli_sock_fd;
 	struct sockaddr_in cliaddr;
 };
+
+
+
+
+#ifdef  DEBUG
 #define RTCP_PRINTF(fmt,args...) do{printf("[%s %s] FILE:[%s]--[%s]LINE:[%d]:"fmt, __DATE__, __TIME__,__FILE__,__FUNCTION__,__LINE__,##args);}while(0);
+#else
+#define RTCP_PRINTF(...) printf(__VA_ARGS__) 
+#endif
+
 typedef void* (*svr_process_thread)(void *);
 
 

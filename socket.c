@@ -353,33 +353,36 @@ static int socket_accept(int iSockFd, struct sockaddr_in *address, int uWaitMsec
 */
 static int socket_server_crate(unsigned short uPort)
 {
-   int sock = -1;
-   struct sockaddr_in address;
+    int sock = -1;
+    int optval = 1;
+    struct sockaddr_in address;
 
-   memset(&address,0,sizeof(struct sockaddr_in));
-   sock = socket_create(false);
-   if(-1 == sock)
-   {
-       RTCP_PRINTF("socket crate faild!\n");
-       return -1;
-   }
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = htonl(INADDR_ANY);
-    address.sin_port = htons(uPort);
- 
-   if(0 != bind(sock,(struct sockaddr *)&address,sizeof(struct sockaddr_in)))
-   {
-       RTCP_PRINTF("socket bind faild!\n");
-       goto exit;
-   }
+    memset(&address,0,sizeof(struct sockaddr_in));
+    sock = socket_create(false);
+    if(-1 == sock)
+    {
+        RTCP_PRINTF("socket crate faild!\n");
+        return -1;
+    }
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_ANY);
+        address.sin_port = htons(uPort);
     
-   if(0 != listen(sock,SOCK_LISTEN_NUM))
-   {
-       RTCP_PRINTF("socket listen faild!\n");
-       goto exit;
-   }
+    /*SO_REUSEADDR是让端口释放后立即就可以被再次使用*/
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+    if(0 != bind(sock,(struct sockaddr *)&address,sizeof(struct sockaddr_in)))
+    {
+        RTCP_PRINTF("socket bind faild!\n");
+        goto exit;
+    }
+    
+    if(0 != listen(sock,SOCK_LISTEN_NUM))
+    {
+        RTCP_PRINTF("socket listen faild!\n");
+        goto exit;
+    }
 
-   return sock;
+    return sock;
 
 exit:
    socket_close(sock);
@@ -396,56 +399,56 @@ exit:
 */
 void  *socket_server_pthread_crate(void *arg)
 {
-   struct svr_process_t *svr_process = NULL;
-   int cli_sock_fd = -1;
-   struct sockaddr_in cli_addr;
-   pthread_attr_t attr;
-   struct svr_t *svr = (struct svr_t *)arg;
-   socklen_t addr_len = 0;
-   int ret = 0;
-   int cli_num = 0;
-   pthread_t tid = (pthread_t)-1;
-   if(NULL == svr->func)
-   {
-       RTCP_PRINTF("svr process thread func is NULL,please define the func!\n");
-       return NULL;
-   }
-    while(1)
+    struct svr_process_t *svr_process = NULL;
+    int cli_sock_fd = -1;
+    struct sockaddr_in cli_addr;
+    pthread_attr_t attr;
+    struct svr_t *svr = (struct svr_t *)arg;
+    socklen_t addr_len = 0;
+    int ret = 0;
+    int cli_num = 0;
+    pthread_t tid = (pthread_t)-1;
+    if(NULL == svr->func)
     {
-       memset((char *)&cli_addr, 0, sizeof (cli_addr));
-       addr_len = sizeof (cli_addr);
-       do {
-			cli_sock_fd = socket_accept(svr->sver_sock_fd, &cli_addr, svr->uWaitMsec);
-		} while ((-1 == cli_sock_fd) && (EINTR == errno));
-        if (-1 == cli_sock_fd) {
-			RTCP_PRINTF("FAIL to accept, svr->sock_fd = %d, %s, TRY AGAIN\n", svr->sver_sock_fd, strerror(errno));
-			sleep(1);	
-			continue;
-		}
-        svr_process = (struct svr_process_t *)malloc(sizeof (*svr_process));
-        if (NULL == svr_process) {
-			RTCP_PRINTF("OUT of memory, sizeof (*svr_process) = %d\n", (int)sizeof (*svr_process));
-			SAFE_CLOSE(cli_sock_fd);
-			continue;
-		}
-        memset((char *)svr_process, 0, sizeof (*svr_process));
-		svr_process->cli_sock_fd = cli_sock_fd;
-		memcpy((char *)&(svr_process->cliaddr), (char *)&cli_addr, sizeof (struct sockaddr_in));
-        
-        setPthreadAttr(&attr, 50, 1024 * 1024, 1);
-        ret = pthread_create(&tid, NULL, svr->func, svr_process);
-        pthread_attr_destroy(&attr);
-        
-        RTCP_PRINTF("#######Cli_%d_Connected!\n", cli_num++);
-		if (0 != ret) {
-			RTCP_PRINTF("FAIL to create svr_process_thread, %s\n", strerror(ret));
-			SAFE_CLOSE(svr_process->cli_sock_fd);
-			SAFE_FREE(svr_process);
-			continue;
-		}
+        RTCP_PRINTF("svr process thread func is NULL,please define the func!\n");
+        return NULL;
     }
-    socket_close(svr->sver_sock_fd);
-    return NULL;
+        while(1)
+        {
+        memset((char *)&cli_addr, 0, sizeof (cli_addr));
+        addr_len = sizeof (cli_addr);
+        do {
+                cli_sock_fd = socket_accept(svr->sver_sock_fd, &cli_addr, svr->uWaitMsec);
+            } while ((-1 == cli_sock_fd) && (EINTR == errno));
+            if (-1 == cli_sock_fd) {
+                RTCP_PRINTF("FAIL to accept, svr->sock_fd = %d, %s, TRY AGAIN\n", svr->sver_sock_fd, strerror(errno));
+                sleep(1);	
+                continue;
+            }
+            svr_process = (struct svr_process_t *)malloc(sizeof (*svr_process));
+            if (NULL == svr_process) {
+                RTCP_PRINTF("OUT of memory, sizeof (*svr_process) = %d\n", (int)sizeof (*svr_process));
+                SAFE_CLOSE(cli_sock_fd);
+                continue;
+            }
+            memset((char *)svr_process, 0, sizeof (*svr_process));
+            svr_process->cli_sock_fd = cli_sock_fd;
+            memcpy((char *)&(svr_process->cliaddr), (char *)&cli_addr, sizeof (struct sockaddr_in));
+            
+            setPthreadAttr(&attr, 50, 1024 * 1024, 1);
+            ret = pthread_create(&tid, NULL, svr->func, svr_process);
+            pthread_attr_destroy(&attr);
+            
+            RTCP_PRINTF("#######Cli_%d_Connected!\n", cli_num++);
+            if (0 != ret) {
+                RTCP_PRINTF("FAIL to create svr_process_thread, %s\n", strerror(ret));
+                SAFE_CLOSE(svr_process->cli_sock_fd);
+                SAFE_FREE(svr_process);
+                continue;
+            }
+        }
+        socket_close(svr->sver_sock_fd);
+        return NULL;
 }
 
 /*
@@ -457,18 +460,18 @@ void  *socket_server_pthread_crate(void *arg)
 */
 static int svr_main(struct svr_t *svr)
 {
-	int ret = 0;
+    int ret = 0;
     pthread_attr_t attr;
-	pthread_t tid = (pthread_t)-1;
+    pthread_t tid = (pthread_t)-1;
 
     setPthreadAttr(&attr, 50, 64 * 1024, 1);
-	ret = pthread_create(&tid, NULL, socket_server_pthread_crate, svr);
+    ret = pthread_create(&tid, NULL, socket_server_pthread_crate, svr);
     pthread_attr_destroy(&attr);
-	if (0 != ret) {
-		RTCP_PRINTF("FAIL to create svr_main_thread, listen_port = %u, %s\n", (unsigned int)svr->listen_port, strerror(ret));
-		return -1;
-	}
-	return 0;
+    if (0 != ret) {
+        RTCP_PRINTF("FAIL to create svr_main_thread, listen_port = %u, %s\n", (unsigned int)svr->listen_port, strerror(ret));
+        return -1;
+    }
+    return 0;
 }
 
 /*
@@ -484,8 +487,8 @@ int svr_init(unsigned short int port, svr_process_thread func, int uWaitMsec)
     svr = (struct svr_t *)malloc(sizeof(struct svr_t));
     if(NULL == svr)
     {
-         RTCP_PRINTF("svr malloc faild!\n");
-         return -1;
+        RTCP_PRINTF("svr malloc faild!\n");
+        return -1;
     }
     memset(svr,0,sizeof(sizeof(struct svr_t)));
     svr->sver_sock_fd = socket_server_crate(port);
