@@ -1,15 +1,9 @@
 #include "rtcp.h"
 #include "socket.h"
 #include "kbhit.h"
-
 #define  RECONNETED_CNT    30    /*尝试重连次数*/
 
-#define  RTCP_PORT1        6001
-#define  RTCP_PORT2        6002
 #define  RTCP_SWAP_BUFF_MAX_SIZE    (1024 * 2)
-
- 
-
 
 struct rtcp_cli_t
 {
@@ -62,25 +56,21 @@ static int rtcp_swap_stream(int src_fd,int dist_fd)
 
 static void *svr_process_thread_1(void *arg)
 {
-#if 1
     int another_sock_fd = -1;
     struct svr_process_t *psvr_t = (struct svr_process_t *)(arg);
     g_fd.sock_fd[0] = psvr_t->cli_sock_fd;                  /*将本端的描述符保存*/
     another_sock_fd = get_another_stream(1);                     /*获取对端fd*/
     rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/
-#endif 
     return NULL;
 }
 
 static void *svr_process_thread_2(void *arg)
 { 
- #if 1   
     int another_sock_fd = -1;
     struct svr_process_t *psvr_t = (struct svr_process_t *)(arg);
     g_fd.sock_fd[1] = psvr_t->cli_sock_fd;                  /*将本端的描述符保存*/
     another_sock_fd = get_another_stream(0);                     /*获取对端fd*/
-    rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/
-#endif 
+    rtcp_swap_stream(psvr_t->cli_sock_fd,another_sock_fd);     /*获取对端fd*/ 
     return NULL;
 }
 
@@ -92,13 +82,13 @@ static int rtcp_server_thread_start(unsigned short int port_1, unsigned short in
         RTCP_PRINTF("svr_1 crate faild!\n");
         return -1;
     }
-#if 1
+
     if(-1 == svr_init(port_2, svr_process_thread_2, WAIT_FOREVER))
     {
         RTCP_PRINTF("svr_2 crate faild!\n");
         return -1;
     }
-#endif
+
     return 0;
 }
 
@@ -211,10 +201,6 @@ void rtcp_help(void)
     printf("Press 'q' to exit\n");
     return;
 }
-
-
-
-
 
 
 int main(int argc, char *argv[])
