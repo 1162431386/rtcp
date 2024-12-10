@@ -662,6 +662,52 @@ int sys_socket_writen(int sockfd, void* pbuf, int buflen)
 	return(buflen);
 }
 
+/**@brief	向对端发送数据
+ * @param[in]  sockfd 调用sys_socket_create()返回的套接字
+ * @param[in]  pbuf 接收缓冲区
+ * @param[in]  buflen 发送数据的长度
+ * @param[in]  uWaitMsec:等待时间
+ * @param[out] 无
+ * @return	  实际发送到数据的长度
+ */
+
+int sys_socket_writen_wait(int sockfd, void *pbuf, int buflen, int uWaitMsec) {
+    int nleft, nwritten;
+    char *ptr;
+    struct timeval stTimeout;
+    fd_set wset;
+
+    ptr = (char *)pbuf;
+    nleft = buflen;
+
+    while (nleft > 0) {
+        stTimeout.tv_sec = uWaitMsec / 1000;
+        stTimeout.tv_usec = (uWaitMsec % 1000) * 1000;
+
+        FD_ZERO(&wset);
+        FD_SET(sockfd, &wset);
+        if (select(sockfd + 1, NULL, &wset, NULL, &stTimeout) <= 0) {
+            /* 0--timeout */
+            SOCKET_PRINTF("Send() error, %s\n", strerror(errno));
+            return -1;
+        }
+
+        if ((nwritten = send(sockfd, ptr, nleft, MSG_NOSIGNAL)) == -1) {
+            if (errno == EINTR) {
+                SOCKET_PRINTF("EINTR\n");
+                nwritten = 0;
+            } else {
+                SOCKET_PRINTF("Send() error, %s\n", strerror(errno));
+                return -1;
+            }
+        }
+
+        nleft -= nwritten;
+        ptr += nwritten;
+    }
+
+    return (buflen);
+}
 
 
 
